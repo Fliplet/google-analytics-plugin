@@ -1,5 +1,6 @@
-package com.danielcwilson.plugins.analytics;
+package org.apache.cordova.analytics;
 
+import com.fliplet.BuildConfig;
 import com.google.android.gms.analytics.GoogleAnalytics;
 import com.google.android.gms.analytics.Logger.LogLevel;
 import com.google.android.gms.analytics.HitBuilders;
@@ -22,35 +23,35 @@ public class UniversalAnalyticsPlugin extends CordovaPlugin {
     public static final String TRACK_EVENT = "trackEvent";
     public static final String TRACK_EXCEPTION = "trackException";
     public static final String TRACK_TIMING = "trackTiming";
-    public static final String TRACK_METRIC = "trackMetric";
     public static final String ADD_DIMENSION = "addCustomDimension";
     public static final String ADD_TRANSACTION = "addTransaction";
     public static final String ADD_TRANSACTION_ITEM = "addTransactionItem";
+    public static final String SET_DEFAULT_TRACKER_WITH_ID = "setDefaultTrackerWithAccountID";
 
-    public static final String SET_ALLOW_IDFA_COLLECTION = "setAllowIDFACollection";
     public static final String SET_USER_ID = "setUserId";
-    public static final String SET_ANONYMIZE_IP = "setAnonymizeIp";
-    public static final String SET_OPT_OUT = "setOptOut";
-    public static final String SET_APP_VERSION = "setAppVersion";
     public static final String DEBUG_MODE = "debugMode";
     public static final String ENABLE_UNCAUGHT_EXCEPTION_REPORTING = "enableUncaughtExceptionReporting";
 
-    public Boolean trackerStarted = false;
+    private static final String DEFAULT_TRACKER_RELEASE = "UA-35892004-14";
+    private static final String DEFAULT_TRACKER_TESTING = "UA-35892004-15";
+    private String default_tracker = null;
+
     public Boolean debugModeEnabled = false;
     public HashMap<Integer, String> customDimensions = new HashMap<Integer, String>();
 
-    public Tracker tracker;
+    public HashMap<String, Tracker> trackers = new HashMap<String, Tracker>();
 
     @Override
     public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
+        String trackerId;
         if (START_TRACKER.equals(action)) {
-            String id = args.getString(0);
-            this.startTracker(id, callbackContext);
+            trackerId = args.getString(0);
+            this.startTracker(trackerId, callbackContext);
             return true;
         } else if (TRACK_VIEW.equals(action)) {
-            int length = args.length();
             String screen = args.getString(0);
-            this.trackView(screen, length > 1 && !args.isNull(1) ? args.getString(1) : "", length > 2 && !args.isNull(2) ? args.getBoolean(2) : false, callbackContext);
+            trackerId = args.getString(1);
+            this.trackView(screen, trackerId, callbackContext);
             return true;
         } else if (TRACK_EVENT.equals(action)) {
             int length = args.length();
@@ -60,25 +61,25 @@ public class UniversalAnalyticsPlugin extends CordovaPlugin {
                         length > 1 ? args.getString(1) : "",
                         length > 2 ? args.getString(2) : "",
                         length > 3 ? args.getLong(3) : 0,
-                        length > 4 ? args.getBoolean(4) : false,
+                        length > 4 ? args.getString(4) : default_tracker,
                         callbackContext);
             }
             return true;
         } else if (TRACK_EXCEPTION.equals(action)) {
             String description = args.getString(0);
             Boolean fatal = args.getBoolean(1);
-            this.trackException(description, fatal, callbackContext);
+            trackerId = args.getString(2);
+            this.trackException(description, fatal, trackerId, callbackContext);
             return true;
         } else if (TRACK_TIMING.equals(action)) {
             int length = args.length();
             if (length > 0) {
-                this.trackTiming(args.getString(0), length > 1 ? args.getLong(1) : 0, length > 2 ? args.getString(2) : "", length > 3 ? args.getString(3) : "", callbackContext);
-            }
-            return true;
-        } else if (TRACK_METRIC.equals(action)) {
-            int length = args.length();
-            if (length > 0) {
-                this.trackMetric(args.getInt(0), length > 1 ? args.getString(1) : "", callbackContext);
+                this.trackTiming(args.getString(0),
+                        length > 1 ? args.getLong(1) : 0,
+                        length > 2 ? args.getString(2) : "",
+                        length > 3 ? args.getString(3) : "",
+                        length > 4 ? args.getString(4) : default_tracker,
+                        callbackContext);
             }
             return true;
         } else if (ADD_DIMENSION.equals(action)) {
@@ -113,38 +114,72 @@ public class UniversalAnalyticsPlugin extends CordovaPlugin {
                         callbackContext);
             }
             return true;
-        } else if (SET_ALLOW_IDFA_COLLECTION.equals(action)) {
-            this.setAllowIDFACollection(args.getBoolean(0), callbackContext);
         } else if (SET_USER_ID.equals(action)) {
             String userId = args.getString(0);
             this.setUserId(userId, callbackContext);
-        } else if (SET_ANONYMIZE_IP.equals(action)) {
-            boolean anonymize = args.getBoolean(0);
-            this.setAnonymizeIp(anonymize, callbackContext);
-        } else if (SET_OPT_OUT.equals(action)) {
-            boolean optout = args.getBoolean(0);
-            this.setOptOut(optout, callbackContext);
-        } else if (SET_APP_VERSION.equals(action)) {
-            String version = args.getString(0);
-            this.setAppVersion(version, callbackContext);
         } else if (DEBUG_MODE.equals(action)) {
             this.debugMode(callbackContext);
         } else if (ENABLE_UNCAUGHT_EXCEPTION_REPORTING.equals(action)) {
             Boolean enable = args.getBoolean(0);
             this.enableUncaughtExceptionReporting(enable, callbackContext);
+        } else if (SET_DEFAULT_TRACKER_WITH_ID.equals(action)) {
+            trackerId = args.getString(0);
+            this.setDefaultTrackerWithAccountID(trackerId, callbackContext);
         }
+
         return false;
     }
 
+    /**
+     * get tracker is exists, create if does not exist.
+     * @param trackerId tracker id
+     * @return tracker; null if it was not possible to create the tracker;
+     */
+    private Tracker getTracker (String trackerId) {
+        if(trackers.get(trackerId) != null) {
+            return trackers.get(trackerId);
+        }
+
+        Tracker tracker = startTracker(trackerId);
+        if(tracker != null) {
+            return tracker;
+        }
+
+        default_tracker = ( default_tracker == null && BuildConfig.DEBUG ) ? DEFAULT_TRACKER_TESTING : DEFAULT_TRACKER_RELEASE;
+
+        return getTracker(default_tracker);
+    }
+
+    private void setDefaultTrackerWithAccountID( String trackerId, CallbackContext callbackContext) {
+
+        default_tracker = trackerId;
+        callbackContext.success("Default tracker was set.");
+
+    }
+
     private void startTracker(String id, CallbackContext callbackContext) {
-        if (null != id && id.length() > 0) {
-            tracker = GoogleAnalytics.getInstance(this.cordova.getActivity()).newTracker(id);
+        if (null != id && id.length() > 0 && trackers.get(id) != null) {
+
+            Tracker tracker = GoogleAnalytics.getInstance(this.cordova.getActivity()).newTracker(id);
             callbackContext.success("tracker started");
-            trackerStarted = true;
             GoogleAnalytics.getInstance(this.cordova.getActivity()).setLocalDispatchPeriod(30);
+            trackers.put(id,tracker);
+
         } else {
             callbackContext.error("tracker id is not valid");
         }
+    }
+
+    private Tracker startTracker(String id) {
+
+        if (null != id && id.length() > 0 && trackers.get(id) == null) {
+
+            Tracker tracker = GoogleAnalytics.getInstance(this.cordova.getActivity()).newTracker(id);
+            GoogleAnalytics.getInstance(this.cordova.getActivity()).setLocalDispatchPeriod(30);
+            trackers.put(id, tracker);
+            return tracker;
+        }
+        return null;
     }
 
     private void addCustomDimension(Integer key, String value, CallbackContext callbackContext) {
@@ -183,8 +218,9 @@ public class UniversalAnalyticsPlugin extends CordovaPlugin {
         }
     }
 
-    private void trackView(String screenname, String campaignUrl, boolean newSession, CallbackContext callbackContext) {
-        if (! trackerStarted ) {
+    private void trackView(String screenname, String trackerId, CallbackContext callbackContext) {
+        Tracker tracker = getTracker(trackerId);
+        if (tracker == null) {
             callbackContext.error("Tracker not started");
             return;
         }
@@ -192,27 +228,19 @@ public class UniversalAnalyticsPlugin extends CordovaPlugin {
         if (null != screenname && screenname.length() > 0) {
             tracker.setScreenName(screenname);
 
-            HitBuilders.ScreenViewBuilder hitBuilder = new HitBuilders.ScreenViewBuilder();
+            HitBuilders.AppViewBuilder hitBuilder = new HitBuilders.AppViewBuilder();
             addCustomDimensionsToHitBuilder(hitBuilder);
 
-            if(!campaignUrl.equals("")){
-                hitBuilder.setCampaignParamsFromUrl(campaignUrl);
-            }
-            
-            if(!newSession) {
-                tracker.send(hitBuilder.build());
-            } else {
-                tracker.send(hitBuilder.setNewSession().build());
-            }
-                    
+            tracker.send(hitBuilder.build());
             callbackContext.success("Track Screen: " + screenname);
         } else {
             callbackContext.error("Expected one non-empty string argument.");
         }
     }
 
-    private void trackEvent(String category, String action, String label, long value, boolean newSession, CallbackContext callbackContext) {
-        if (!trackerStarted) {
+    private void trackEvent(String category, String action, String label, long value, String trackerId, CallbackContext callbackContext) {
+        Tracker tracker = getTracker(trackerId);
+        if (tracker == null ) {
             callbackContext.error("Tracker not started");
             return;
         }
@@ -221,49 +249,22 @@ public class UniversalAnalyticsPlugin extends CordovaPlugin {
             HitBuilders.EventBuilder hitBuilder = new HitBuilders.EventBuilder();
             addCustomDimensionsToHitBuilder(hitBuilder);
 
-            if(!newSession){
-                tracker.send(hitBuilder
-                        .setCategory(category)
-                        .setAction(action)
-                        .setLabel(label)
-                        .setValue(value)
-                        .build());
-            } else {
-                tracker.send(hitBuilder
-                        .setCategory(category)
-                        .setAction(action)
-                        .setLabel(label)
-                        .setValue(value)
-                        .setNewSession()
-                        .build());                
-            }
-            
+            tracker.send(hitBuilder
+                    .setCategory(category)
+                    .setAction(action)
+                    .setLabel(label)
+                    .setValue(value)
+                    .build()
+            );
             callbackContext.success("Track Event: " + category);
         } else {
             callbackContext.error("Expected non-empty string arguments.");
         }
     }
 
-    private void trackMetric(Integer key, String value, CallbackContext callbackContext) {
-        if (!trackerStarted) {
-            callbackContext.error("Tracker not started");
-            return;
-        }
-
-        if (key >= 0) {
-            HitBuilders.ScreenViewBuilder hitBuilder = new HitBuilders.ScreenViewBuilder();
-            tracker.send(hitBuilder
-                    .setCustomMetric(key, Float.parseFloat(value))
-                    .build()
-            );
-            callbackContext.success("Track Metric: " + key + ", value: " + value);
-        } else {
-            callbackContext.error("Expected integer key: " + key + ", and string value: " + value);
-        }
-    }
-
-    private void trackException(String description, Boolean fatal, CallbackContext callbackContext) {
-        if (!trackerStarted) {
+    private void trackException(String description, Boolean fatal, String trackerId, CallbackContext callbackContext) {
+        Tracker tracker = getTracker(trackerId);
+        if (tracker == null) {
             callbackContext.error("Tracker not started");
             return;
         }
@@ -283,8 +284,9 @@ public class UniversalAnalyticsPlugin extends CordovaPlugin {
         }
     }
 
-    private void trackTiming(String category, long intervalInMilliseconds, String name, String label, CallbackContext callbackContext) {
-        if (!trackerStarted) {
+    private void trackTiming(String category, long intervalInMilliseconds, String name, String label, String trackerId, CallbackContext callbackContext) {
+        Tracker tracker = getTracker(trackerId);
+        if (tracker == null) {
             callbackContext.error("Tracker not started");
             return;
         }
@@ -307,7 +309,8 @@ public class UniversalAnalyticsPlugin extends CordovaPlugin {
     }
 
     private void addTransaction(String id, String affiliation, double revenue, double tax, double shipping, String currencyCode, CallbackContext callbackContext) {
-        if (!trackerStarted) {
+        Tracker tracker = getTracker(default_tracker);
+        if (tracker == null) {
             callbackContext.error("Tracker not started");
             return;
         }
@@ -331,7 +334,8 @@ public class UniversalAnalyticsPlugin extends CordovaPlugin {
     }
 
     private void addTransactionItem(String id, String name, String sku, String category, double price, long quantity, String currencyCode, CallbackContext callbackContext) {
-        if (!trackerStarted) {
+        Tracker tracker = getTracker(default_tracker);
+        if (tracker == null) {
             callbackContext.error("Tracker not started");
             return;
         }
@@ -356,45 +360,17 @@ public class UniversalAnalyticsPlugin extends CordovaPlugin {
         }
     }
 
-    private void setAllowIDFACollection(Boolean enable, CallbackContext callbackContext) {
-        if (!trackerStarted) {
-            callbackContext.error("Tracker not started");
-            return;
-        }
-
-        tracker.enableAdvertisingIdCollection(enable);
-        callbackContext.success("Enable Advertising Id Collection: " + enable);
-    }
-
     private void debugMode(CallbackContext callbackContext) {
         GoogleAnalytics.getInstance(this.cordova.getActivity()).getLogger().setLogLevel(LogLevel.VERBOSE);
+
 
         this.debugModeEnabled = true;
         callbackContext.success("debugMode enabled");
     }
 
-    private void setAnonymizeIp(boolean anonymize, CallbackContext callbackContext) {
-        if (!trackerStarted) {
-            callbackContext.error("Tracker not started");
-            return;
-        }
-
-        tracker.setAnonymizeIp(anonymize);
-        callbackContext.success("Set AnonymizeIp " + anonymize);
-    }
-
-    private void setOptOut(boolean optout, CallbackContext callbackContext) {
-        if (!trackerStarted) {
-            callbackContext.error("Tracker not started");
-            return;
-        }
-
-        GoogleAnalytics.getInstance(this.cordova.getActivity()).setAppOptOut(optout);
-        callbackContext.success("Set Opt-Out " + optout);
-    }
-
     private void setUserId(String userId, CallbackContext callbackContext) {
-        if (!trackerStarted) {
+        Tracker tracker = getTracker(default_tracker);
+        if (tracker == null) {
             callbackContext.error("Tracker not started");
             return;
         }
@@ -403,18 +379,9 @@ public class UniversalAnalyticsPlugin extends CordovaPlugin {
         callbackContext.success("Set user id" + userId);
     }
 
-    private void setAppVersion(String version, CallbackContext callbackContext) {
-        if (!trackerStarted) {
-            callbackContext.error("Tracker not started");
-            return;
-        }
-
-        tracker.set("&av", version);
-        callbackContext.success("Set app version: " + version);
-    }
-
     private void enableUncaughtExceptionReporting(Boolean enable, CallbackContext callbackContext) {
-        if (!trackerStarted) {
+        Tracker tracker = getTracker(default_tracker);
+        if (tracker == null){
             callbackContext.error("Tracker not started");
             return;
         }

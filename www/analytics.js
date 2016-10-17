@@ -1,27 +1,11 @@
 function UniversalAnalyticsPlugin() {}
 
-UniversalAnalyticsPlugin.prototype.startTrackerWithId = function(id, success, error) {
+UniversalAnalyticsPlugin.prototype.startTrackerWithAccountID = function(id, success, error) {
   cordova.exec(success, error, 'UniversalAnalytics', 'startTrackerWithId', [id]);
-};
-
-UniversalAnalyticsPlugin.prototype.setAllowIDFACollection = function(enable, success, error) {
-  cordova.exec(success, error, 'UniversalAnalytics', 'setAllowIDFACollection', [enable]);
 };
 
 UniversalAnalyticsPlugin.prototype.setUserId = function(id, success, error) {
   cordova.exec(success, error, 'UniversalAnalytics', 'setUserId', [id]);
-};
-
-UniversalAnalyticsPlugin.prototype.setAnonymizeIp = function(anonymize, success, error) {
-  cordova.exec(success, error, 'UniversalAnalytics', 'setAnonymizeIp', [anonymize]);
-};
-
-UniversalAnalyticsPlugin.prototype.setOptOut = function(optout, success, error) {
-  cordova.exec(success, error, 'UniversalAnalytics', 'setOptOut', [optout]);
-};
-
-UniversalAnalyticsPlugin.prototype.setAppVersion = function(version, success, error) {
-  cordova.exec(success, error, 'UniversalAnalytics', 'setAppVersion', [version]);
 };
 
 /* enables verbose logging */
@@ -29,27 +13,15 @@ UniversalAnalyticsPlugin.prototype.debugMode = function(success, error) {
   cordova.exec(success, error, 'UniversalAnalytics', 'debugMode', []);
 };
 
-UniversalAnalyticsPlugin.prototype.trackMetric = function(key, value, success, error) {
-  cordova.exec(success, error, 'UniversalAnalytics', 'trackMetric', [key, value]);
+UniversalAnalyticsPlugin.prototype.trackPageview = function(screen, trackingId, success, error) {
+  cordova.exec(success, error, 'UniversalAnalytics', 'trackView', [screen, trackingId]);
 };
 
-UniversalAnalyticsPlugin.prototype.trackView = function(screen, campaingUrl, newSession, success, error) {
-  if (typeof campaingUrl === 'undefined' || campaingUrl === null) {
-    campaingUrl = '';
-  }
-
-  if (typeof newSession === 'undefined' || newSession === null) {
-    newSession = false;
-  }  
-
-  cordova.exec(success, error, 'UniversalAnalytics', 'trackView', [screen, campaingUrl, newSession]);
-};
-
-UniversalAnalyticsPlugin.prototype.addCustomDimension = function(key, value, success, error) {
+UniversalAnalyticsPlugin.prototype.setCustomDimensionValue = function(key, value, trackingId, success, error) {
   cordova.exec(success, error, 'UniversalAnalytics', 'addCustomDimension', [key, value]);
 };
 
-UniversalAnalyticsPlugin.prototype.trackEvent = function(category, action, label, value, newSession, success, error) {
+UniversalAnalyticsPlugin.prototype.trackEvent = function(category, action, label, value, trackingId, success, error) {
   if (typeof label === 'undefined' || label === null) {
     label = '';
   }
@@ -57,21 +29,33 @@ UniversalAnalyticsPlugin.prototype.trackEvent = function(category, action, label
     value = 0;
   }
 
-  if (typeof newSession === 'undefined' || newSession === null) {
-    newSession = false;
-  }    
-
-  cordova.exec(success, error, 'UniversalAnalytics', 'trackEvent', [category, action, label, value, newSession]);
+  cordova.exec(success, error, 'UniversalAnalytics', 'trackEvent', [category, action, label, value, trackingId]);
 };
+
+
+UniversalAnalyticsPlugin.prototype.setDefaultTrackerWithAccountID = function(defaultTrackingId) {
+
+  cordova.exec(success, error, 'UniversalAnalytics', 'setDefaultTrackerWithAccountID', [category, action, label, value, trackingId]);
+
+}
+
+UniversalAnalyticsPlugin.prototype.trackSocial = function(name, action, target, trackingId) {
+
+}
+
+UniversalAnalyticsPlugin.prototype.setCustomMetricValue = function(index, value, trackingId) {
+
+}
 
 /**
  * https://developers.google.com/analytics/devguides/collection/android/v3/exceptions
  */
-UniversalAnalyticsPlugin.prototype.trackException = function(description, fatal, success, error) {
-  cordova.exec(success, error, 'UniversalAnalytics', 'trackException', [description, fatal]);
+UniversalAnalyticsPlugin.prototype.trackException = function(description, fatal, trackingId, success, error) {
+
+  cordova.exec(success, error, 'UniversalAnalytics', 'trackException', [description, fatal, trackingId]);
 };
 
-UniversalAnalyticsPlugin.prototype.trackTiming = function(category, intervalInMilliseconds, name, label, success, error) {
+UniversalAnalyticsPlugin.prototype.trackTiming = function(category, intervalInMilliseconds, name, label, trackingId, success, error) {
   if (typeof intervalInMilliseconds === 'undefined' || intervalInMilliseconds === null) {
     intervalInMilliseconds = 0;
   }
@@ -82,7 +66,7 @@ UniversalAnalyticsPlugin.prototype.trackTiming = function(category, intervalInMi
     label = '';
   }
 
-  cordova.exec(success, error, 'UniversalAnalytics', 'trackTiming', [category, intervalInMilliseconds, name, label]);
+  cordova.exec(success, error, 'UniversalAnalytics', 'trackTiming', [category, intervalInMilliseconds, name, label, trackingId]);
 };
 
 /* Google Analytics e-Commerce Tracking */
